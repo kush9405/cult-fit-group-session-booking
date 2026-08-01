@@ -1,4 +1,4 @@
-# cultfit-booker
+# cultfit-group-session-booking
 
 Books your preferred Cult.fit class automatically every night at 10:05 PM IST, using GitHub Actions (free, no server needed).
 
