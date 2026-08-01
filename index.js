@@ -1,6 +1,17 @@
 // Cult.fit auto-booking script — same logic already validated in the n8n workflow,
 // ported to plain Node.js so it can run as a GitHub Actions scheduled job (free, no server).
 
+const fs = require('fs');
+
+// Writes a value to GITHUB_OUTPUT so the workflow's email-notification step can read it
+// (e.g. steps.book.outputs.summary). No-op if run outside GitHub Actions.
+function setOutput(name, value) {
+  if (process.env.GITHUB_OUTPUT) {
+    const delimiter = 'EOF_' + Math.random().toString(36).slice(2);
+    fs.appendFileSync(process.env.GITHUB_OUTPUT, `${name}<<${delimiter}\n${value}\n${delimiter}\n`);
+  }
+}
+
 const API_KEY = process.env.CULT_API_KEY || '9d153009-e961-4718-a343-2a36b0a1d1fd';
 const DEVICE_ID = process.env.CULT_DEVICE_ID;
 const AT_TOKEN = process.env.CULT_AT_TOKEN;
@@ -131,10 +142,17 @@ async function main() {
   if (!result.found) {
     if (result.alreadyBooked) {
       console.log('You already have a booking/waitlist entry for this date. Skipping.');
+      setOutput('outcome', 'already-booked');
+      setOutput('summary', `Already had a booking/waitlist for ${targetDateStr} — skipped, nothing new booked.`);
       return;
     }
     console.log('No matching class found.');
     console.log(JSON.stringify(result, null, 2));
+    setOutput('outcome', 'no-match');
+    setOutput(
+      'summary',
+      `No matching class found for ${targetDateStr}.\nLooking for "${PREFERRED_WORKOUT}" at ${PREFERRED_SLOTS.join(', ')} (center ${PREFERRED_CENTER}).\n\nDebug:\n${JSON.stringify(result, null, 2)}`
+    );
     return;
   }
 
@@ -142,9 +160,13 @@ async function main() {
   const bookingResponse = await bookClass(result.classId);
   console.log('Class booked successfully!');
   console.log(bookingResponse);
+  setOutput('outcome', 'booked');
+  setOutput('summary', `Booked "${PREFERRED_WORKOUT}" at ${result.slot} on ${targetDateStr} (state: ${result.state}).`);
 }
 
 main().catch((err) => {
   console.error('FAILED:', err.message);
+  setOutput('outcome', 'error');
+  setOutput('summary', `Booking run failed with an error: ${err.message}`);
   process.exit(1);
 });

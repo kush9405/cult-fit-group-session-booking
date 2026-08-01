@@ -10,8 +10,19 @@ Books your preferred Cult.fit class automatically every night at 10:05 PM IST, u
    - `CULT_DEVICE_ID`
    - `CULT_AT_TOKEN`
    - `CULT_ST_TOKEN`
+   - `MAIL_APP_PASSWORD` (for email notifications — see below)
 
-   (Get these from cult.fit's website: log in, open browser DevTools → Network tab, click any request to `cult.fit`, and read the `deviceId`, `at`, and `st` values from the request cookie.)
+   (Get the cult.fit values from the website: log in, open browser DevTools → Network tab, click any request to `cult.fit`, and read the `deviceId`, `at`, and `st` values from the request cookie. Paste values with no surrounding quotes.)
+
+### Email notifications
+
+Every run emails you the result (booked / no match / already booked / error) via Gmail SMTP. To enable it:
+
+1. Turn on 2-Step Verification on your Google account (required for app passwords): https://myaccount.google.com/security
+2. Generate an App Password: https://myaccount.google.com/apppasswords → app name "GitHub Actions" → copy the 16-character password it gives you.
+3. Add that 16-character value as the `MAIL_APP_PASSWORD` secret (no quotes, no spaces).
+
+Emails send from and to `kushagraagarwal2003@gmail.com` — edit the `to`/`username`/`from` fields in `.github/workflows/book-class.yml` if you want to change that.
 
 3. **Edit your preferences** — open `.github/workflows/book-class.yml` and adjust the `env:` block: `PREFERRED_CENTER`, `PREFERRED_WORKOUT`, `PREFERRED_SLOTS`, `DAYS_AHEAD`, `ENABLE_WAITLIST`.
 

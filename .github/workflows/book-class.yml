@@ -17,6 +17,7 @@ jobs:
           node-version: 20
 
       - name: Run booking script
+        id: book
         run: node index.js
         env:
           CULT_DEVICE_ID: ${{ secrets.CULT_DEVICE_ID }}
@@ -27,3 +28,19 @@ jobs:
           PREFERRED_SLOTS: '06:00:00,07:00:00,08:00:00,09:00:00,17:00:00'
           DAYS_AHEAD: '4'
           ENABLE_WAITLIST: 'true'
+
+      - name: Email me the result
+        if: always()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: kushagraagarwal2003@gmail.com
+          password: ${{ secrets.MAIL_APP_PASSWORD }}
+          from: Cult.fit Booker
+          to: kushagraagarwal2003@gmail.com
+          subject: "${{ steps.book.outcome == 'success' && '✅' || '❌' }} Cult.fit auto-booking — ${{ steps.book.outputs.outcome || steps.book.outcome }}"
+          body: |
+            ${{ steps.book.outputs.summary || 'The run failed before it could produce a summary — check the logs.' }}
+
+            Full logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
