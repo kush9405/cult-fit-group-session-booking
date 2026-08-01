@@ -1,0 +1,10 @@
+{
+  "name": "cultfit-booker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Automatically books your preferred Cult.fit class every night via GitHub Actions.",
+  "main": "index.js",
+  "engines": {
+    "node": ">=18"
+  }
+}

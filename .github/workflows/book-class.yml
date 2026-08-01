@@ -1,0 +1,29 @@
+name: Auto Book Cult Class
+
+on:
+  schedule:
+    # 22:05 IST daily = 16:35 UTC. Cult.fit opens the day+4 slot around 10 PM IST.
+    - cron: '35 16 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  book:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run booking script
+        run: node index.js
+        env:
+          CULT_DEVICE_ID: ${{ secrets.CULT_DEVICE_ID }}
+          CULT_AT_TOKEN: ${{ secrets.CULT_AT_TOKEN }}
+          CULT_ST_TOKEN: ${{ secrets.CULT_ST_TOKEN }}
+          PREFERRED_CENTER: '1515'
+          PREFERRED_WORKOUT: 'HRX WORKOUT'
+          PREFERRED_SLOTS: '06:00:00,07:00:00,08:00:00,09:00:00,17:00:00'
+          DAYS_AHEAD: '4'
+          ENABLE_WAITLIST: 'true'
