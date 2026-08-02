@@ -3,7 +3,7 @@ name: Auto Book Cult Class
 on:
   schedule:
     # 22:05 IST daily = 16:35 UTC. Cult.fit opens the day+4 slot around 10 PM IST.
-    - cron: '35 16 * * *'
+    - cron: '35 17 * * *'
   workflow_dispatch: {}
 
 jobs:
