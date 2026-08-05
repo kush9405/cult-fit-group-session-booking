@@ -25,7 +25,7 @@ jobs:
           CULT_ST_TOKEN: ${{ secrets.CULT_ST_TOKEN }}
           PREFERRED_CENTER: '1515'
           PREFERRED_WORKOUT: 'HRX WORKOUT'
-          PREFERRED_SLOTS: '06:00:00,07:00:00,08:00:00,09:00:00,17:00:00'
+          PREFERRED_SLOTS: ${{ secrets.PREFERRED_SLOTS || '06:00:00,07:00:00,08:00:00,17:00:00' }}
           DAYS_AHEAD: '4'
           ENABLE_WAITLIST: 'true'
 
