@@ -3,7 +3,7 @@ name: Auto Book Cult Class
 on:
   schedule:
     # 22:05 IST daily = 16:35 UTC. Cult.fit opens the day+4 slot around 10 PM IST.
-    - cron: '30 16 * * *'
+    - cron: '30 18 * * *'
   workflow_dispatch: {}
 
 jobs:
@@ -26,7 +26,7 @@ jobs:
           PREFERRED_CENTER: '1515'
           PREFERRED_WORKOUT: 'HRX WORKOUT'
           PREFERRED_SLOTS: ${{ secrets.PREFERRED_SLOTS || '06:00:00,07:00:00,08:00:00,17:00:00' }}
-          DAYS_AHEAD: '4'
+          DAYS_AHEAD: '3'
           ENABLE_WAITLIST: 'true'
 
       - name: Email me the result
