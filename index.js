@@ -12,6 +12,19 @@ function setOutput(name, value) {
   }
 }
 
+function getTargetDateIST(daysAhead) {
+  const istNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  istNow.setDate(istNow.getDate() + daysAhead);
+  return istNow.toISOString().split('T')[0];
+}
+
+// NEW: returns e.g. "Wednesday, 2026-09-16"
+function formatDayAndDateIST(dateStr) {
+  const d = new Date(`${dateStr}T00:00:00+05:30`);
+  const day = d.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'Asia/Kolkata' });
+  return `${day}, ${dateStr}`;
+}
+
 const API_KEY = process.env.CULT_API_KEY || '9d153009-e961-4718-a343-2a36b0a1d1fd';
 const DEVICE_ID = process.env.CULT_DEVICE_ID;
 const AT_TOKEN = process.env.CULT_AT_TOKEN;
@@ -133,6 +146,7 @@ function findMatch(response, targetDateStr) {
 
 async function main() {
   const targetDateStr = getTargetDateIST(DAYS_AHEAD);
+  const targetDayDate = formatDayAndDateIST(targetDateStr);
   console.log(`Target booking date (IST, +${DAYS_AHEAD}d): ${targetDateStr}`);
   console.log(`Preferences: center=${PREFERRED_CENTER} workout="${PREFERRED_WORKOUT}" slots=${PREFERRED_SLOTS.join(',')} waitlist=${ENABLE_WAITLIST}`);
 
@@ -143,7 +157,7 @@ async function main() {
     if (result.alreadyBooked) {
       console.log('You already have a booking/waitlist entry for this date. Skipping.');
       setOutput('outcome', 'already-booked');
-      setOutput('summary', `Already had a booking/waitlist for ${targetDateStr} — skipped, nothing new booked.`);
+      setOutput('summary', `Already had a booking/waitlist for ${targetDayDate} — skipped, nothing new booked.`);
       return;
     }
     console.log('No matching class found.');
@@ -151,7 +165,7 @@ async function main() {
     setOutput('outcome', 'no-match');
     setOutput(
       'summary',
-      `No matching class found for ${targetDateStr}.\nLooking for "${PREFERRED_WORKOUT}" at ${PREFERRED_SLOTS.join(', ')} (center ${PREFERRED_CENTER}).\n\nDebug:\n${JSON.stringify(result, null, 2)}`
+      `No matching class found for ${targetDayDate}.\nLooking for "${PREFERRED_WORKOUT}" at ${PREFERRED_SLOTS.join(', ')} (center ${PREFERRED_CENTER}).\n\nDebug:\n${JSON.stringify(result, null, 2)}`
     );
     return;
   }
@@ -161,7 +175,7 @@ async function main() {
   console.log('Class booked successfully!');
   console.log(bookingResponse);
   setOutput('outcome', 'booked');
-  setOutput('summary', `Booked "${PREFERRED_WORKOUT}" at ${result.slot} on ${targetDateStr} (state: ${result.state}).`);
+  setOutput('summary', `Booked "${PREFERRED_WORKOUT}" at ${result.slot} on ${targetDayDate} (state: ${result.state}).`);
 }
 
 main().catch((err) => {
