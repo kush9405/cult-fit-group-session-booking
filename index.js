@@ -290,11 +290,11 @@ function findMatch(response, targetDateStr) {
 
     if (classObj) {
       const location =
-        PREFERRED_CENTER_NAME ||
-        classObj.centerName ||
-        centerEntry.centerName ||
-        centerEntry.name ||
-        `Cult.fit center ${PREFERRED_CENTER}`;
+  classObj.centerName ||
+  centerEntry.centerName ||
+  centerEntry.name ||
+  PREFERRED_CENTER_NAME ||
+  `Cult.fit center ${PREFERRED_CENTER}`;
       return {
         found: true,
         classId: classObj.id,
