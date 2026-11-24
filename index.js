@@ -179,6 +179,13 @@ async function addToGoogleCalendar(event, classId) {
     res = await fetch(`${base}/${eventId}`, { method: 'PUT', headers, body: JSON.stringify(body) });
   }
   const data = await res.json();
+  console.log('GOOGLE CALENDAR EVENT DEBUG:', JSON.stringify({
+  requestedStart: body.start,
+  requestedEnd: body.end,
+  savedStart: data.start,
+  savedEnd: data.end,
+  eventLink: data.htmlLink
+}, null, 2));
   if (!res.ok) throw new Error(`Google Calendar API failed: ${res.status} — ${JSON.stringify(data)}`);
   return data.htmlLink;
 }
