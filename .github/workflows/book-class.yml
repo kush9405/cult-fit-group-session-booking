@@ -23,11 +23,17 @@ jobs:
           CULT_DEVICE_ID: ${{ secrets.CULT_DEVICE_ID }}
           CULT_AT_TOKEN: ${{ secrets.CULT_AT_TOKEN }}
           CULT_ST_TOKEN: ${{ secrets.CULT_ST_TOKEN }}
+          # Optional: auto-add booked classes to Google Calendar (see README)
+          GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
+          GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
           PREFERRED_CENTER: '1515'
           PREFERRED_WORKOUT: 'HRX WORKOUT'
           PREFERRED_SLOTS: ${{ secrets.PREFERRED_SLOTS || '06:00:00,07:00:00,08:00:00,17:00:00' }}
           DAYS_AHEAD: '3'
           ENABLE_WAITLIST: 'true'
+          # Calendar event settings (used when a class gets booked)
+          CLASS_DURATION_MINUTES: '50'
+          PREFERRED_CENTER_NAME: ''   # optional, e.g. 'Cult HSR 19th Main' — shown as the event location
 
       - name: Email me the result
         if: always()
@@ -40,6 +46,8 @@ jobs:
           from: Cult.fit Booker
           to: kushagraagarwal2003@gmail.com
           subject: "${{ steps.book.outcome == 'success' && '✅' || '❌' }} Cult.fit auto-booking — ${{ steps.book.outputs.outcome || steps.book.outcome }}"
+          # .ics calendar invite for the booked class (empty when nothing was booked → no attachment)
+          attachments: ${{ steps.book.outputs.ics_path }}
           body: |
             ${{ steps.book.outputs.summary || 'The run failed before it could produce a summary — check the logs.' }}
 

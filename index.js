@@ -37,6 +37,151 @@ const PREFERRED_SLOTS = (process.env.PREFERRED_SLOTS || '07:00:00,08:00:00,09:00
   .map((s) => s.trim());
 const DAYS_AHEAD = Number(process.env.DAYS_AHEAD || 4);
 const ENABLE_WAITLIST = (process.env.ENABLE_WAITLIST || 'true').toLowerCase() === 'true';
+const CLASS_DURATION_MINUTES = Number(process.env.CLASS_DURATION_MINUTES || 50);
+const PREFERRED_CENTER_NAME = process.env.PREFERRED_CENTER_NAME || '';
+const ICS_PATH = 'class.ics';
+// Google Calendar API (optional — skipped if not set). Key = full JSON of a service-account key.
+const GOOGLE_SERVICE_ACCOUNT_KEY = process.env.GOOGLE_SERVICE_ACCOUNT_KEY || '';
+const GOOGLE_CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || '';
+
+// ---------- Calendar helpers ----------
+
+// "2026-11-28" + "07:00:00" (IST) -> Date
+function istDateTime(dateStr, timeStr) {
+  const t = timeStr.length === 5 ? `${timeStr}:00` : timeStr;
+  return new Date(`${dateStr}T${t}+05:30`);
+}
+
+// Date -> "20261128T013000Z" (UTC, as used by iCalendar and Google Calendar links)
+function toCalUTC(d) {
+  return d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+}
+
+function icsEscape(str) {
+  return String(str).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+}
+
+function buildCalendarEvent({ dateStr, startTime, endTime, classId, state, location }) {
+  const start = istDateTime(dateStr, startTime);
+  const end = endTime
+    ? istDateTime(dateStr, endTime)
+    : new Date(start.getTime() + CLASS_DURATION_MINUTES * 60 * 1000);
+  const waitlisted = state === 'WAITLIST_AVAILABLE';
+  const title = `${waitlisted ? '[Waitlist] ' : ''}Cult.fit — ${PREFERRED_WORKOUT}`;
+  const description = waitlisted
+    ? `You are on the WAITLIST for this class (classId ${classId}). Check the Cult.fit app to see if it got confirmed.`
+    : `Booked automatically by Cult.fit Booker (classId ${classId}).`;
+
+  const ics = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//cultfit-booker//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    'BEGIN:VEVENT',
+    // Stable UID per class, so re-importing updates the same event instead of duplicating it.
+    `UID:cultfit-${classId}@cultfit-booker`,
+    `DTSTAMP:${toCalUTC(new Date())}`,
+    `DTSTART:${toCalUTC(start)}`,
+    `DTEND:${toCalUTC(end)}`,
+    `SUMMARY:${icsEscape(title)}`,
+    `DESCRIPTION:${icsEscape(description)}`,
+    `LOCATION:${icsEscape(location)}`,
+    `STATUS:${waitlisted ? 'TENTATIVE' : 'CONFIRMED'}`,
+    'BEGIN:VALARM',
+    'ACTION:DISPLAY',
+    'DESCRIPTION:Cult.fit class in 1 hour',
+    'TRIGGER:-PT60M',
+    'END:VALARM',
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ].join('\r\n');
+
+  const googleLink =
+    'https://calendar.google.com/calendar/render?action=TEMPLATE' +
+    `&text=${encodeURIComponent(title)}` +
+    `&dates=${toCalUTC(start)}/${toCalUTC(end)}` +
+    `&details=${encodeURIComponent(description)}` +
+    `&location=${encodeURIComponent(location)}` +
+    '&ctz=Asia/Kolkata';
+
+  return { ics, googleLink, start, end, title, description, location, waitlisted };
+}
+
+// ---------- Google Calendar API (service account, no npm dependencies) ----------
+
+function base64url(input) {
+  return Buffer.from(input).toString('base64').replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+}
+
+// Exchanges a signed JWT for a short-lived OAuth access token (standard service-account flow).
+async function getGoogleAccessToken(serviceAccount) {
+  const crypto = require('crypto');
+  const now = Math.floor(Date.now() / 1000);
+  const header = base64url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
+  const claims = base64url(
+    JSON.stringify({
+      iss: serviceAccount.client_email,
+      scope: 'https://www.googleapis.com/auth/calendar.events',
+      aud: 'https://oauth2.googleapis.com/token',
+      iat: now,
+      exp: now + 3600,
+    })
+  );
+  const signature = crypto
+    .createSign('RSA-SHA256')
+    .update(`${header}.${claims}`)
+    .sign(serviceAccount.private_key)
+    .toString('base64')
+    .replace(/=+$/, '')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_');
+
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion: `${header}.${claims}.${signature}`,
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(`Google auth failed: ${res.status} — ${JSON.stringify(data)}`);
+  return data.access_token;
+}
+
+// Adds the class to Google Calendar. The event ID is derived from the classId, so re-running
+// for the same class updates the existing event instead of creating a duplicate.
+async function addToGoogleCalendar(event, classId) {
+  const serviceAccount = JSON.parse(GOOGLE_SERVICE_ACCOUNT_KEY);
+  const token = await getGoogleAccessToken(serviceAccount);
+
+  // Google event IDs may only use lowercase a-v and 0-9.
+  const eventId = `cultfit${String(classId).toLowerCase().replace(/[^a-v0-9]/g, '')}`;
+  const body = {
+    id: eventId,
+    summary: event.title,
+    description: event.description,
+    location: event.location,
+    start: { dateTime: event.start.toISOString(), timeZone: 'Asia/Kolkata' },
+    end: { dateTime: event.end.toISOString(), timeZone: 'Asia/Kolkata' },
+    status: event.waitlisted ? 'tentative' : 'confirmed',
+    colorId: event.waitlisted ? '5' : '10', // yellow for waitlist, green for booked
+    reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 60 }] },
+  };
+
+  const base = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(GOOGLE_CALENDAR_ID)}/events`;
+  const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
+
+  let res = await fetch(base, { method: 'POST', headers, body: JSON.stringify(body) });
+  if (res.status === 409) {
+    // Event for this class already exists — update it instead.
+    res = await fetch(`${base}/${eventId}`, { method: 'PUT', headers, body: JSON.stringify(body) });
+  }
+  const data = await res.json();
+  if (!res.ok) throw new Error(`Google Calendar API failed: ${res.status} — ${JSON.stringify(data)}`);
+  return data.htmlLink;
+}
 
 function commonHeaders() {
   if (!DEVICE_ID || !AT_TOKEN || !ST_TOKEN) {
@@ -137,7 +282,20 @@ function findMatch(response, targetDateStr) {
     );
 
     if (classObj) {
-      return { found: true, classId: classObj.id, slot: classObj.startTime, state: classObj.state };
+      const location =
+        PREFERRED_CENTER_NAME ||
+        classObj.centerName ||
+        centerEntry.centerName ||
+        centerEntry.name ||
+        `Cult.fit center ${PREFERRED_CENTER}`;
+      return {
+        found: true,
+        classId: classObj.id,
+        slot: classObj.startTime,
+        endTime: classObj.endTime,
+        state: classObj.state,
+        location,
+      };
     }
   }
 
@@ -175,7 +333,52 @@ async function main() {
   console.log('Class booked successfully!');
   console.log(bookingResponse);
   setOutput('outcome', 'booked');
-  setOutput('summary', `Booked "${PREFERRED_WORKOUT}" at ${result.slot} on ${targetDayDate} (state: ${result.state}).`);
+
+  // Build a calendar event for the booked class: an .ics file (attached to the email — opens in
+  // Google Calendar / Apple Calendar / Outlook) plus a one-click "Add to Google Calendar" link.
+  let calendarText = '';
+  let event;
+  try {
+    event = buildCalendarEvent({
+      dateStr: targetDateStr,
+      startTime: result.slot,
+      endTime: result.endTime,
+      classId: result.classId,
+      state: result.state,
+      location: result.location,
+    });
+    fs.writeFileSync(ICS_PATH, event.ics);
+    setOutput('ics_path', ICS_PATH);
+    console.log(`Calendar event written to ${ICS_PATH}`);
+  } catch (err) {
+    console.error('Could not create calendar event (booking itself succeeded):', err.message);
+  }
+
+  if (event) {
+    // Automatically add to Google Calendar if the API secrets are configured.
+    let autoAdded = false;
+    if (GOOGLE_SERVICE_ACCOUNT_KEY && GOOGLE_CALENDAR_ID) {
+      try {
+        const link = await addToGoogleCalendar(event, result.classId);
+        autoAdded = true;
+        console.log(`Added to Google Calendar: ${link}`);
+        calendarText += `\n\n📅 Added to your Google Calendar automatically: ${link}`;
+      } catch (err) {
+        console.error('Could not add to Google Calendar (booking itself succeeded):', err.message);
+        calendarText += `\n\n⚠️ Could not add to Google Calendar automatically: ${err.message}`;
+      }
+    } else {
+      console.log('GOOGLE_SERVICE_ACCOUNT_KEY / GOOGLE_CALENDAR_ID not set — skipping automatic calendar add.');
+    }
+    if (!autoAdded) {
+      calendarText += `\n\nAdd to Google Calendar: ${event.googleLink}\n(An .ics calendar file is also attached to this email.)`;
+    }
+  }
+
+  setOutput(
+    'summary',
+    `Booked "${PREFERRED_WORKOUT}" at ${result.slot} on ${targetDayDate} (state: ${result.state}).${calendarText}`
+  );
 }
 
 main().catch((err) => {
