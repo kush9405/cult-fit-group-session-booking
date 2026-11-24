@@ -39,7 +39,14 @@ const DAYS_AHEAD = Number(process.env.DAYS_AHEAD || 4);
 const ENABLE_WAITLIST = (process.env.ENABLE_WAITLIST || 'true').toLowerCase() === 'true';
 const CLASS_DURATION_MINUTES = Number(process.env.CLASS_DURATION_MINUTES || 50);
 const PREFERRED_CENTER_NAME = process.env.PREFERRED_CENTER_NAME || '';
+
+// Full venue names for centers whose API response omits the display name.
+const CENTER_LOCATION_NAMES = {
+  '1515': 'Cult SG Palya, Tavarekere Main Road',
+};
+
 const ICS_PATH = 'class.ics';
+
 // Google Calendar API (optional — skipped if not set). Key = full JSON of a service-account key.
 const GOOGLE_SERVICE_ACCOUNT_KEY = process.env.GOOGLE_SERVICE_ACCOUNT_KEY || '';
 const GOOGLE_CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || '';
@@ -178,14 +185,17 @@ async function addToGoogleCalendar(event, classId) {
     // Event for this class already exists — update it instead.
     res = await fetch(`${base}/${eventId}`, { method: 'PUT', headers, body: JSON.stringify(body) });
   }
+
   const data = await res.json();
+
   console.log('GOOGLE CALENDAR EVENT DEBUG:', JSON.stringify({
-  requestedStart: body.start,
-  requestedEnd: body.end,
-  savedStart: data.start,
-  savedEnd: data.end,
-  eventLink: data.htmlLink
-}, null, 2));
+    requestedStart: body.start,
+    requestedEnd: body.end,
+    savedStart: data.start,
+    savedEnd: data.end,
+    eventLink: data.htmlLink,
+  }, null, 2));
+
   if (!res.ok) throw new Error(`Google Calendar API failed: ${res.status} — ${JSON.stringify(data)}`);
   return data.htmlLink;
 }
@@ -289,24 +299,24 @@ function findMatch(response, targetDateStr) {
     );
 
     if (classObj) {
-      const locationMap = {
-  "1515": "Cult SG Palya, Tavarekere Main Road",
-};
+      const location =
+        CENTER_LOCATION_NAMES[String(centerEntry.centerId)] ||
+        classObj.centerName ||
+        centerEntry.centerName ||
+        centerEntry.name ||
+        PREFERRED_CENTER_NAME ||
+        `Cult.fit center ${PREFERRED_CENTER}`;
 
-const location =
-  locationMap[String(centerEntry.centerId)] ||
-  classObj.centerName ||
-  centerEntry.centerName ||
-  centerEntry.name ||
-  PREFERRED_CENTER_NAME ||
-  `Cult.fit center ${PREFERRED_CENTER}`;
-
-      console.log("CENTER DEBUG:", {
-  classCenterName: classObj.centerName,
-  centerEntryCenterName: centerEntry.centerName,
-  centerEntryName: centerEntry.name,
-  centerEntry,
-});
+      return {
+        found: true,
+        classId: classObj.id,
+        slot: slotEntry.id,
+        endTime: classObj.endTime,
+        state: classObj.state,
+        location,
+      };
+    }
+  }
 
   return { found: false, debug };
 }
@@ -327,6 +337,7 @@ async function main() {
       setOutput('summary', `Already had a booking/waitlist for ${targetDayDate} — skipped, nothing new booked.`);
       return;
     }
+
     console.log('No matching class found.');
     console.log(JSON.stringify(result, null, 2));
     setOutput('outcome', 'no-match');
@@ -347,6 +358,7 @@ async function main() {
   // Google Calendar / Apple Calendar / Outlook) plus a one-click "Add to Google Calendar" link.
   let calendarText = '';
   let event;
+
   try {
     event = buildCalendarEvent({
       dateStr: targetDateStr,
@@ -366,11 +378,12 @@ async function main() {
   if (event) {
     // Automatically add to Google Calendar if the API secrets are configured.
     let autoAdded = false;
+
     if (GOOGLE_SERVICE_ACCOUNT_KEY && GOOGLE_CALENDAR_ID) {
       try {
         const link = await addToGoogleCalendar(event, result.classId);
         autoAdded = true;
-        console.log(`Added to Google Calendar: ${link}`);
+        console.log(`Added to your Google Calendar: ${link}`);
         calendarText += `\n\n📅 Added to your Google Calendar automatically: ${link}`;
       } catch (err) {
         console.error('Could not add to Google Calendar (booking itself succeeded):', err.message);
@@ -379,6 +392,7 @@ async function main() {
     } else {
       console.log('GOOGLE_SERVICE_ACCOUNT_KEY / GOOGLE_CALENDAR_ID not set — skipping automatic calendar add.');
     }
+
     if (!autoAdded) {
       calendarText += `\n\nAdd to Google Calendar: ${event.googleLink}\n(An .ics calendar file is also attached to this email.)`;
     }
