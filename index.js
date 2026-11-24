@@ -291,7 +291,7 @@ function findMatch(response, targetDateStr) {
       return {
         found: true,
         classId: classObj.id,
-        slot: classObj.startTime,
+        slot: slotEntry.id,
         endTime: classObj.endTime,
         state: classObj.state,
         location,
