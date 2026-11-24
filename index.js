@@ -289,22 +289,24 @@ function findMatch(response, targetDateStr) {
     );
 
     if (classObj) {
-      const location =
+      const locationMap = {
+  "1515": "Cult SG Palya, Tavarekere Main Road",
+};
+
+const location =
+  locationMap[String(centerEntry.centerId)] ||
   classObj.centerName ||
   centerEntry.centerName ||
   centerEntry.name ||
   PREFERRED_CENTER_NAME ||
   `Cult.fit center ${PREFERRED_CENTER}`;
-      return {
-        found: true,
-        classId: classObj.id,
-        slot: slotEntry.id,
-        endTime: classObj.endTime,
-        state: classObj.state,
-        location,
-      };
-    }
-  }
+
+      console.log("CENTER DEBUG:", {
+  classCenterName: classObj.centerName,
+  centerEntryCenterName: centerEntry.centerName,
+  centerEntryName: centerEntry.name,
+  centerEntry,
+});
 
   return { found: false, debug };
 }
